@@ -11,9 +11,11 @@ namespace Disassembler.Core
     public sealed class Controller
     {
         private static Controller instance;
+        private Decoder decoder;
+
         private Controller()
         {
-
+            decoder = new Decoder();
         }
 
         public static Controller GetInstance()
