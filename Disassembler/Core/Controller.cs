@@ -48,7 +48,7 @@ namespace Disassembler.Core
         {
             bool disassemble = true;
             int instruction_pointer = 0;
-            int buffer_lengt = 0;
+            int buffer_lenght = 0;
             Instruction decoded_instruction = new Instruction();
 
             //check if there is a file open
@@ -65,12 +65,12 @@ namespace Disassembler.Core
             }
             else
             {
-                buffer_lengt = machine_code.Length;
+                buffer_lenght = machine_code.Length;
                 decoder.machine_code = machine_code;
             }
 
             //main disassembling loop
-            while (disassemble)
+            while (disassemble && instruction_pointer < buffer_lenght)
             {
                 decoded_instruction = decoder.DecodeInstructionAt(instruction_pointer);
                 //test if decoding was successfull, (decoded instruction lenght > 0)
@@ -82,9 +82,10 @@ namespace Disassembler.Core
                 }
                 else
                 {
-
+                    //Debug.WriteLine(decoded_instruction.name + " " + decoded_instruction.operand1 + decoded_instruction.operand2);
+                    instruction_pointer += decoded_instruction.length;
                 }
-                disassemble = false;
+                
             }
         }
     }
