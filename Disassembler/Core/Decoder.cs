@@ -202,7 +202,7 @@ namespace Disassembler.Core
                     }
                     else //else decode operand
                     {
-                        decoded_operand = DecodeOperand(found.operand1, mod, reg, rm, ip); //set _rm, _mod and _reg params to XX as we don't have MODR/M byte
+                        decoded_operand = DecodeOperand(found.operand1, mod, reg, rm, ip);
                         if (decoded_operand.Key < 0)
                         {
                             //handle errors
@@ -224,7 +224,7 @@ namespace Disassembler.Core
                     }
                     else //else decode operand
                     {
-                        decoded_operand = DecodeOperand(found.operand2, mod, reg, rm, ip); //set _rm, _mod and _reg params to XX as we don't have MODR/M byte
+                        decoded_operand = DecodeOperand(found.operand2, mod, reg, rm, ip);
                         if (decoded_operand.Key < 0)
                         {
                             //handle errors
@@ -305,7 +305,6 @@ namespace Disassembler.Core
                 };
                 return result;
             }
-
             return result;
         }
 
@@ -313,9 +312,9 @@ namespace Disassembler.Core
         /// Method decodes instruction operand.
         /// </summary>
         /// <param name="_operand">Operand code.</param>
-        /// <param name="_mod">2 bit MOD field.</param>
-        /// <param name="_reg">3 bit REG field.</param>
-        /// <param name="_rm">3 bit R/M field.</param>
+        /// <param name="_mod">2 bit MOD field. Set to "XX" if no MOD field</param>
+        /// <param name="_reg">3 bit REG field. Set to "XX" if no REG field</param>
+        /// <param name="_rm">3 bit R/M field. Set to "XX" if no R/M field</param>
         /// <param name="ip">Current value of the instruction pointer.</param>
         /// <returns>Key value pair of number of bytes decoded as key + decoded operand as value.</returns>
         private KeyValuePair<int, string> DecodeOperand(string _operand, string _mod, string _reg, string _rm, int ip)
@@ -615,57 +614,27 @@ namespace Disassembler.Core
         {
             if (group.Equals("GRP1"))
             {
-                string name = "";
-                if (GRP1.TryGetValue(_reg, out name))
-                {
-                    return name;
-                }
-                return "";
+                return GRP1.TryGetValue(_reg, out string name) ? name : "";
             }
             else if (group.Equals("GRP2"))
             {
-                string name = "";
-                if (GRP2.TryGetValue(_reg, out name))
-                {
-                    return name;
-                }
-                return "";
+                return GRP2.TryGetValue(_reg, out string name) ? name : "";
             }
             else if (group.Equals("GRP3a"))
             {
-                string name = "";
-                if (GRP3A.TryGetValue(_reg, out name))
-                {
-                    return name;
-                }
-                return "";
+                return GRP3A.TryGetValue(_reg, out string name) ? name : "";
             }
             else if (group.Equals("GRP3b"))
             {
-                string name = "";
-                if (GRP3B.TryGetValue(_reg, out name))
-                {
-                    return name;
-                }
-                return "";
+                return GRP3B.TryGetValue(_reg, out string name) ? name : "";
             }
             else if (group.Equals("GRP4"))
             {
-                string name = "";
-                if (GRP4.TryGetValue(_reg, out name))
-                {
-                    return name;
-                }
-                return "";
+                return GRP4.TryGetValue(_reg, out string name) ? name : "";
             }
             else
             {
-                string name = "";
-                if (GRP5.TryGetValue(_reg, out name))
-                {
-                    return name;
-                }
-                return "";
+                return GRP5.TryGetValue(_reg, out string name) ? name : "";
             }
         }
     }
