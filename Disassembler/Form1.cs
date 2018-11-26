@@ -15,7 +15,6 @@ namespace Disassembler
     public partial class Form1 : Form
     {
         private string file_path = "add2.exe"; //Dummy path
-        private Controller controller;
         public Form1()
         {
             InitializeComponent();
@@ -43,7 +42,7 @@ namespace Disassembler
 
         private void disassemble_button_Click(object sender, EventArgs e)
         {
-            Controller.GetInstance().Disassemble();
+            Controller.GetInstance().Disassemble(-1, 0);
         }
     }
 }

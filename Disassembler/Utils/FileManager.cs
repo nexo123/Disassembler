@@ -93,6 +93,41 @@ namespace Disassembler.Utils
             }
             return sb.ToString();
         }
+
+        public byte[] GetMachineCode(int offset, int num_bytes)
+        {
+            byte[] machine_code = null;
+            if (offset < 0)
+            {
+                int header_lengt = GetHeaderSize();
+                if (header_lengt < 0)
+                {
+                    MessageBox.Show("File is not an EXE file, could not determine code segment! Consider setting the code segment manually.", "Error");
+                    return null;
+                }
+
+                try
+                {
+                    machine_code = iostream.ReadFromFile(header_lengt, num_bytes);
+                }
+                catch (Exception e)
+                {
+                    MessageBox.Show("Reading machine code failed! Offset: " + offset + ", num_bytes: " + num_bytes + Environment.NewLine + e.Message);
+                }
+            }
+            else
+            {
+                try
+                {
+                    machine_code = iostream.ReadFromFile(offset, num_bytes);
+                }
+                catch (Exception e)
+                {
+                    MessageBox.Show("Reading machine code failed! Offset: " + offset + ", num_bytes: " + num_bytes + Environment.NewLine + e.Message);
+                }
+            }
+            return machine_code;
+        }
             
     }
 }
