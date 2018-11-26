@@ -48,6 +48,11 @@ namespace Disassembler.Utils
             return false;
         }
 
+        public bool CheckIfFileOpen()
+        {
+            return iostream.IsFileOpen();
+        }
+
         private bool CheckIfEXE()
         {
             var tmp = iostream.ReadFromFile(0, 2);

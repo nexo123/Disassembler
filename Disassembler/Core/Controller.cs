@@ -49,14 +49,25 @@ namespace Disassembler.Core
             bool disassemble = true;
             int instruction_pointer = 0;
             int buffer_lengt = 0;
-
             Instruction decoded_instruction = new Instruction();
+
+            //check if there is a file open
+            if (!FileManager.GetInstance().CheckIfFileOpen())
+            {
+                MessageBox.Show("Disassembly failed! File not opened! Please open a file first.", "Error");
+                return;
+            }
             byte[] machine_code = FileManager.GetInstance().GetMachineCode(offset, num_bytes);
             if (machine_code == null)
             {
-                disassemble = false;
+                //disassemble = false;
+                return;
             }
-            decoder.machine_code = machine_code;
+            else
+            {
+                buffer_lengt = machine_code.Length;
+                decoder.machine_code = machine_code;
+            }
 
             //main disassembling loop
             while (disassemble)

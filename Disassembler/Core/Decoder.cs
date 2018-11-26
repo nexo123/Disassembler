@@ -159,7 +159,7 @@ namespace Disassembler.Core
             first_byte = Convert.ToString(machine_code[ip], 16).PadLeft(2, '0').ToUpper();
 
             //get the instruction based on opcode (first_byte), if successfull proceed with decoding
-            if (instruction_set.TryGetValue(first_byte, out result))
+            if (instruction_set.TryGetValue(first_byte, out Instruction found))
             {
                 //test if instruction has a second byte
                 if (result.length == 2)
@@ -173,22 +173,22 @@ namespace Disassembler.Core
                     rm = second_byte.Substring(5, 3);
 
                     //test for opcode extension
-                    if (result.name.Contains("GRP"))
+                    if (found.name.Contains("GRP"))
                     {
-                        string name = DecodeOpcodeExtension(reg, result.name);
+                        string name = DecodeOpcodeExtension(reg, found.name);
                         result.name = name;
                     }
 
                     //decode operands
                     KeyValuePair<int, string> decoded_operand = new KeyValuePair<int, string>();
                     //decode first operand
-                    if (result.operand1.Equals("-")) //first operand doesn't exist, set to empty string
+                    if (found.operand1.Equals("-")) //first operand doesn't exist, set to empty string
                     {
                         result.operand1 = "";
                     }
                     else //else decode operand
                     {
-                        decoded_operand = DecodeOperand(result.operand1, mod, reg, rm, ip); //set _rm, _mod and _reg params to XX as we don't have MODR/M byte
+                        decoded_operand = DecodeOperand(found.operand1, mod, reg, rm, ip); //set _rm, _mod and _reg params to XX as we don't have MODR/M byte
                         if (decoded_operand.Key < 0)
                         {
                             //handle errors
@@ -204,13 +204,13 @@ namespace Disassembler.Core
                     }
 
                     //decode second operand
-                    if (result.operand2.Equals("-")) //second operand doesn't exist, set to empty string
+                    if (found.operand2.Equals("-")) //second operand doesn't exist, set to empty string
                     {
                         result.operand2 = "";
                     }
                     else //else decode operand
                     {
-                        decoded_operand = DecodeOperand(result.operand2, mod, reg, rm, ip); //set _rm, _mod and _reg params to XX as we don't have MODR/M byte
+                        decoded_operand = DecodeOperand(found.operand2, mod, reg, rm, ip); //set _rm, _mod and _reg params to XX as we don't have MODR/M byte
                         if (decoded_operand.Key < 0)
                         {
                             //handle errors
@@ -229,17 +229,17 @@ namespace Disassembler.Core
                 {
                     KeyValuePair<int, string> decoded_operand = new KeyValuePair<int, string>();
                     //decode first operand
-                    if (result.operand1.Equals("-")) //first operand doesn't exist, set to empty string
+                    if (found.operand1.Equals("-")) //first operand doesn't exist, set to empty string
                     {
                         result.operand1 = "";
                     }
-                    else if (registers.ContainsValue(result.operand1) || segment_registers.ContainsValue(result.operand1)) //first operand is found in register dictionaries
+                    else if (registers.ContainsValue(found.operand1) || segment_registers.ContainsValue(found.operand1)) //first operand is found in register dictionaries
                     {
                         //do nothing, operand is already decoded
                     }
                     else //else decode operand
                     {
-                        decoded_operand = DecodeOperand(result.operand1, "XX", "XX", "XX", ip); //set _rm, _mod and _reg params to XX as we don't have MODR/M byte
+                        decoded_operand = DecodeOperand(found.operand1, "XX", "XX", "XX", ip); //set _rm, _mod and _reg params to XX as we don't have MODR/M byte
                         if (decoded_operand.Key < 0)
                         {
                             //handle errors
@@ -255,17 +255,17 @@ namespace Disassembler.Core
                     }
 
                     //decode second operand
-                    if (result.operand2.Equals("-")) //second operand doesn't exist, set to empty string
+                    if (found.operand2.Equals("-")) //second operand doesn't exist, set to empty string
                     {
                         result.operand2 = "";
                     }
-                    else if (registers.ContainsValue(result.operand2) || segment_registers.ContainsValue(result.operand2)) //second operand is found in register dictionaries
+                    else if (registers.ContainsValue(found.operand2) || segment_registers.ContainsValue(found.operand2)) //second operand is found in register dictionaries
                     {
                         //do nothing, operand is already decoded
                     }
                     else //else decode operand
                     {
-                        decoded_operand = DecodeOperand(result.operand2, "XX", "XX", "XX", ip); //set _rm, _mod and _reg params to XX as we don't have MODR/M byte
+                        decoded_operand = DecodeOperand(found.operand2, "XX", "XX", "XX", ip); //set _rm, _mod and _reg params to XX as we don't have MODR/M byte
                         if (decoded_operand.Key < 0)
                         {
                             //handle errors
@@ -308,7 +308,6 @@ namespace Disassembler.Core
             KeyValuePair<int, string> operand;
             string first = "";
             string second = "";
-            string reg = "";
             if (_operand.Length > 1)
             {
                 first = _operand.Substring(0, 1);
@@ -323,12 +322,13 @@ namespace Disassembler.Core
             switch (first)
             {
                 case "A": //Direct address. The instruction has no ModR/M byte; the address of the operand is encoded in the instruction. Applicable, e.g., to far JMP (opcode EA).
+                    operand = Decode32bAddress(ip);
                     break;
                 case "E": //A ModR/M byte follows the opcode and specifies the operand. The operand is either a general-purpose register or a memory address. If it is a memory address, the address is computed from a segment register and any of the following values: a base register, an index register, a displacement.
-
+                    operand = DecodeGeneralOperand(ip, second, _mod, _rm, _reg);
                     break;
                 case "G": //The reg field of the ModR/M byte selects a general register.
-                    operand = DecodeRegOperand(_reg);
+                    operand = DecodeRegOperand(_reg, second);
                     break;
                 case "I": //Immediate data. The operand value is encoded in subsequent bytes of the instruction.
                     operand = DecodeImmediateOperand(ip, second, _mod, _rm);
@@ -354,23 +354,43 @@ namespace Disassembler.Core
         }
 
 
+        private KeyValuePair<int, string> Decode32bAddress(int ip)
+        {
+            return new KeyValuePair<int, string>(4, "[" + Convert.ToString(machine_code[ip + 2], 16).ToUpper().PadLeft(2, '0') +
+                    Convert.ToString(machine_code[ip + 1], 16).ToUpper().PadLeft(2, '0') + ":" + 
+                    Convert.ToString(machine_code[ip + 4], 16).ToUpper().PadLeft(2, '0') +
+                    Convert.ToString(machine_code[ip + 3], 16).ToUpper().PadLeft(2, '0') + "H]");
+        }
+
+
         private KeyValuePair<int, string> DecodeSregOperand(string _reg)
         {
             if (segment_registers.TryGetValue(_reg, out string sreg))
             {
                 return new KeyValuePair<int, string>(0, sreg);
             }
-            return new KeyValuePair<int, string>(0, "Decoding segment register failed!");
+            return new KeyValuePair<int, string>(-1, "Decoding segment register failed!");
         }
 
 
-        private KeyValuePair<int, string> DecodeRegOperand(string _reg)
+        private KeyValuePair<int, string> DecodeRegOperand(string _reg, string second)
         {
-            if (segment_registers.TryGetValue(_reg, out string reg))
+            string tmp = "";
+            //we need to append either 1 or 0 to the reg field based on W bit.
+            if (second.Equals("w") || second.Equals("v"))
+            {
+                tmp = _reg + "1";
+            }
+            else
+            {
+                tmp = _reg + "0";
+            }
+
+            if (segment_registers.TryGetValue(tmp, out string reg))
             {
                 return new KeyValuePair<int, string>(0, reg);
             }
-            return new KeyValuePair<int, string>(0, "Decoding register failed!");
+            return new KeyValuePair<int, string>(-1, "Decoding register failed!");
         }
 
 
@@ -388,7 +408,52 @@ namespace Disassembler.Core
         }
 
 
-        private KeyValuePair<int, string> DecodeGeneralOperand(int ip, string second, string mod, string rm)
+        private KeyValuePair<int, string> DecodeGeneralOperand(int ip, string second, string mod, string rm, string reg)
+        {
+            string addrmode = "";
+            switch (mod)
+            {
+                case "00": //No displacement unless RM field is set to 110 = then direct 16b address
+                    if (rm.Equals("110"))
+                    {
+                        return new KeyValuePair<int, string>(2, "[" + Convert.ToString(machine_code[ip + 3], 16).ToUpper().PadLeft(2, '0') +
+                                Convert.ToString(machine_code[ip + 2], 16).ToUpper().PadLeft(2, '0') + "H]");
+                    }
+                    else
+                    {
+                        if (addressing_modes.TryGetValue(rm, out addrmode))
+                        {
+                            return new KeyValuePair<int, string>(0, "[" + addrmode + "]");
+                        }
+                        else
+                        {
+                            return new KeyValuePair<int, string>(-1, "Decoding general operand failed!");
+                        }
+                    }
+                case "01": //8b displacement
+                    if (addressing_modes.TryGetValue(rm, out addrmode))
+                    {
+                        return new KeyValuePair<int, string>(1, "[" + addrmode + Convert.ToString(machine_code[ip + 2], 16).ToUpper().PadLeft(2, '0') + "H]");
+                    }
+                    else
+                    {
+                        return new KeyValuePair<int, string>(-1, "Decoding general operand failed!");
+                    }
+                case "10": //16b displacement
+                    if (addressing_modes.TryGetValue(rm, out addrmode))
+                    {
+                        return new KeyValuePair<int, string>(2, "[" + addrmode + Convert.ToString(machine_code[ip + 3], 16).ToUpper().PadLeft(2, '0') + Convert.ToString(machine_code[ip + 2], 16).ToUpper().PadLeft(2, '0') + "H]");
+                    }
+                    else
+                    {
+                        return new KeyValuePair<int, string>(-1, "Decoding general operand failed!");
+                    }
+                case "11": //Register
+                    return DecodeRegOperand(reg, second);
+                default:
+                    return new KeyValuePair<int, string>(-1, "Decoding immediate operand failed!");
+            }
+        }
 
 
         private KeyValuePair<int, string> DecodeImmediateOperand(int ip, string second, string mod, string rm)
@@ -461,7 +526,7 @@ namespace Disassembler.Core
                         return new KeyValuePair<int, string>(1, Convert.ToString(machine_code[ip + 2], 16).ToUpper().PadLeft(2, '0') + "H");
                     }
                 default:
-                    return new KeyValuePair<int, string>(0, "Decoding immediate operand failed!");
+                    return new KeyValuePair<int, string>(-1, "Decoding immediate operand failed!");
             }
         }
 
