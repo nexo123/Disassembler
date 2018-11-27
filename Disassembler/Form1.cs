@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Windows.Forms;
 using Disassembler.Core;
-using static Disassembler.Core.Controller;
 
 namespace Disassembler
 {
@@ -11,7 +10,7 @@ namespace Disassembler
         private string file_path = "add2.exe"; //Dummy path
         private int offset = -1;
         private int num_bytes = 0;
-        private List<AssemblyLine> output;
+        private List<string> output;
 
         public Form1()
         {
@@ -40,11 +39,14 @@ namespace Disassembler
 
         private void disassemble_button_Click(object sender, EventArgs e)
         {
+            richTextBox2.Clear();
             output = Controller.GetInstance().Disassemble(offset, num_bytes);
-            foreach (AssemblyLine item in output)
+            richTextBox2.AppendText("\t.mode small" + Environment.NewLine + "\t.code" + Environment.NewLine);
+            foreach (string str in output)
             {
-                richTextBox2.AppendText(item.text);
+                richTextBox2.AppendText(str);
             }
+            richTextBox2.AppendText("\tend");
         }
 
         private void set_offset_button_Click(object sender, EventArgs e)

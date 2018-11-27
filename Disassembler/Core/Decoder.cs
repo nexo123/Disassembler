@@ -174,8 +174,19 @@ namespace Disassembler.Core
                 //test if instruction has a second byte
                 if (found.length == 2)
                 {
-                    //read second byte
-                    second_byte = Convert.ToString(machine_code[ip + 1], 2).PadLeft(8, '0');
+                    //check if the second byt is withing buffer
+                    if ((ip + 1) < machine_code.Length)
+                    {
+                        //read second byte
+                        second_byte = Convert.ToString(machine_code[ip + 1], 2).PadLeft(8, '0');
+                    }
+                    else
+                    {
+                        //handle out of range error
+                        result.length = 0;
+                        result.name = "Instruction pointer out of range! IP: " + ip.ToString("X4") + "H";
+                        return result;
+                    }
 
                     //get rm, reg and mod fields
                     mod = second_byte.Substring(0, 2);

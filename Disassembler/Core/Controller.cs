@@ -48,7 +48,7 @@ namespace Disassembler.Core
         /// </summary>
         /// <param name="offset">Offset from start.</param>
         /// <param name="num_bytes">How many bytes to disassemble.</param>
-        public List<AssemblyLine> Disassemble(int offset, int num_bytes)
+        public List<string> Disassemble(int offset, int num_bytes)
         {
             bool disassemble = true;
             bool potential_end = false;
@@ -92,7 +92,6 @@ namespace Disassembler.Core
                 {
                     CheckCSEnd(potential_end, decoded_instruction, ref disassemble);
                     potential_end = TestPotentialEnd(decoded_instruction);
-                    Debug.WriteLine(decoded_instruction.name + " " + decoded_instruction.operand1 + decoded_instruction.operand2);
                     decoded_instruction.address = instruction_pointer;
                     decoded_instructions_list.Add(decoded_instruction);
                     instruction_pointer += decoded_instruction.length;
@@ -100,7 +99,6 @@ namespace Disassembler.Core
                 }
                 
             }
-
             return BuildAssemblyCode(decoded_instructions_list);
         }
 
@@ -154,34 +152,31 @@ namespace Disassembler.Core
         {
             if (instruction.name.Contains("J") | instruction.name.Contains("LOOP"))
             {
-                UpdateLabelAt(next_ip + Convert.ToInt32(instruction.operand1.Replace("H", string.Empty), 16));
-                if (labels.TryGetValue(next_ip, out string label))
+                int jump_address = next_ip + Convert.ToInt32(instruction.operand1.Replace("H", string.Empty), 16);
+                UpdateLabelAt(jump_address);
+                if (labels.TryGetValue(jump_address, out string label))
                 {
-                    instruction.operand1 = label;
+                    instruction.operand1 = label.Replace(":", "");
                 }
             }
         }
 
 
-        private List<AssemblyLine> BuildAssemblyCode(List<Instruction> instructions)
+        private List<string> BuildAssemblyCode(List<Instruction> instructions)
         {
-            List<AssemblyLine> assembly_code = new List<AssemblyLine>();
+            List<string> assembly_code = new List<string>();
             for (int i = 0; i < instructions.Count; i++)
             {
-                AssemblyLine assembly_line = new AssemblyLine();
+                string assembly_line = "";
                 if (labels.TryGetValue(instructions[i].address, out string label))
                 {
-                    assembly_line.text += label;
+                    assembly_line += label;
                 }
-                assembly_line.text = "\t" + instructions[i].name + "\t" + instructions[i].operand1 + "\t" + instructions[i].operand2 + Environment.NewLine;
+                assembly_line += "\t" + instructions[i].name + "\t" + instructions[i].operand1 + instructions[i].operand2 + Environment.NewLine;
                 assembly_code.Add(assembly_line);
             }
             return assembly_code;
         }
 
-        public class AssemblyLine
-        {
-            public string text { get; set; }
-        }
     }
 }
