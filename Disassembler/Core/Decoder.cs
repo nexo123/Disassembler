@@ -197,7 +197,16 @@ namespace Disassembler.Core
                     if (found.name.Contains("GRP"))
                     {
                         string name = DecodeOpcodeExtension(reg, found.name);
-                        result.name = name;
+                        if (name.Length > 0)
+                        {
+                            result.name = name;
+                        }
+                        else
+                        {
+                            result.name = "Failed to decode opcode extension at " + ip.ToString("X4") + "H";
+                            result.length = 0;
+                            return result;
+                        }
                     }
                     else
                     {
@@ -459,7 +468,7 @@ namespace Disassembler.Core
         }
 
         /// <summary>
-        /// Method decodes E-type operand, can be register or memory.
+        /// Method decodes E-type operand, can be register or memory based on MOD field.
         /// </summary>
         /// <param name="ip">Current value of the instruction pointer.</param>
         /// <param name="second">W-bit.</param>
@@ -521,8 +530,8 @@ namespace Disassembler.Core
         /// </summary>
         /// <param name="ip">Current value of the instruction pointer.</param>
         /// <param name="second">W-bit</param>
-        /// <param name="mod">MODR/M byte MOD field.</param>
-        /// <param name="rm">MODR/M byte R/M field.</param>
+        /// <param name="mod">MODR/M byte MOD field. Please set to "XX" if no MOD field is present.</param>
+        /// <param name="rm">MODR/M byte R/M field. Please set to "XX" if no R/M field is present.</param>
         /// <returns>Key value pair of number of bytes decoded as key + decoded operand as value or an error message if the decoding fails.</returns>
         private KeyValuePair<int, string> DecodeImmediateOperand(int ip, string second, string mod, string rm)
         {
@@ -542,7 +551,7 @@ namespace Disassembler.Core
                             ? new KeyValuePair<int, string>(-1, "Index out of range when decoding I-type operand!")
                             : new KeyValuePair<int, string>(1, Convert.ToString(machine_code[ip + 1], 16).ToUpper().PadLeft(2, '0') + "H");
                     }
-                case "00": //No displacement unless RM field is set to 110 = then direct 16b address
+                case "00": //No displacement unless RM field is set to 110 = then direct 16b address before immediate
                     if (rm.Equals("110"))
                     {
                         if (second.Equals("w") || second.Equals("v"))
@@ -650,9 +659,13 @@ namespace Disassembler.Core
             {
                 return GRP4.TryGetValue(_reg, out string name) ? name : "";
             }
-            else
+            else if (group.Equals("GRP5"))
             {
                 return GRP5.TryGetValue(_reg, out string name) ? name : "";
+            }
+            else
+            {
+                return "";
             }
         }
     }
