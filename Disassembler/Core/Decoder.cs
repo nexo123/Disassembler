@@ -200,6 +200,10 @@ namespace Disassembler.Core
                     {
                         result.operand1 = "";
                     }
+                    else if (registers.ContainsValue(found.operand1) || segment_registers.ContainsValue(found.operand1)) //second operand is found in register dictionaries
+                    {
+                        result.operand1 = found.operand1;
+                    }
                     else //else decode operand
                     {
                         decoded_operand = DecodeOperand(found.operand1, mod, reg, rm, ip);
@@ -221,6 +225,10 @@ namespace Disassembler.Core
                     if (found.operand2.Equals("-")) //second operand doesn't exist, set to empty string
                     {
                         result.operand2 = "";
+                    }
+                    else if (registers.ContainsValue(found.operand2) || segment_registers.ContainsValue(found.operand2)) //second operand is found in register dictionaries
+                    {
+                        result.operand2 = found.operand2;
                     }
                     else //else decode operand
                     {
@@ -301,7 +309,7 @@ namespace Disassembler.Core
                 result = new Instruction
                 {
                     length = 0,
-                    name = "Instruction opcode not found! Please consider updating the instruction set."
+                    name = "Instruction opcode (" + first_byte + "H) not found! Please consider updating the instruction set."
                 };
                 return result;
             }
@@ -351,7 +359,7 @@ namespace Disassembler.Core
                     operand = DecodeJumpOperand(ip, second);
                     break;
                 case "M": //The ModR/M byte refers to a memory location, however the contents of that memory location are irrelevant; the address itself is the operand of the instruction. Applicable, e.g., to LEA
-                    operand = new KeyValuePair<int, string>(-1, "Decoding operand failed! Operand code: " + _operand);
+                    operand = DecodeGeneralOperand(ip, second, _mod, _rm, _reg);
                     break;
                 case "O": //The instruction has no ModR/M byte; the offset of the operand is encoded as a WORD in the instruction. Applicable, e.g., to certain MOVs (opcodes A0 through A3).
                     operand = new KeyValuePair<int, string>(2, Convert.ToString(machine_code[ip + 2], 16).ToUpper().PadLeft(2, '0') + 
@@ -395,7 +403,6 @@ namespace Disassembler.Core
         /// <returns>Key value pair of number of bytes decoded as key + decoded operand as value or an error message if the decoding fails.</returns>
         private KeyValuePair<int, string> DecodeSregOperand(string _reg)
         {
-            Debug.WriteLine(_reg);
             return segment_registers.TryGetValue(_reg, out string sreg)
                 ? new KeyValuePair<int, string>(0, sreg)
                 : new KeyValuePair<int, string>(-1, "Decoding segment register failed!");
@@ -648,6 +655,7 @@ namespace Disassembler.Core
         public string opcode { get; set; }
         public string name { get; set; }
         public int length { get; set; }
+        public int address { get; set; }
         public string operand1 { get; set; }
         public string operand2 { get; set; }
     }

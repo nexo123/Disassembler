@@ -1,9 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows.Forms;
 using Disassembler.Utils;
 
@@ -13,6 +10,7 @@ namespace Disassembler.Core
     {
         private static Controller instance;
         private Decoder decoder;
+        private Dictionary<int, string> labels = new Dictionary<int, string>();
 
         private Controller()
         {
@@ -44,24 +42,34 @@ namespace Disassembler.Core
             instruction_pointer = FileManager.GetInstance().GetHeaderSize();
         }
 
-        public void Disassemble(int offset, int num_bytes)
+
+        /// <summary>
+        /// Main loop, handles disassembling.
+        /// </summary>
+        /// <param name="offset">Offset from start.</param>
+        /// <param name="num_bytes">How many bytes to disassemble.</param>
+        public List<AssemblyLine> Disassemble(int offset, int num_bytes)
         {
             bool disassemble = true;
+            bool potential_end = false;
             int instruction_pointer = 0;
             int buffer_lenght = 0;
             Instruction decoded_instruction = new Instruction();
+            List<Instruction> decoded_instructions_list = new List<Instruction>();
+
+            labels.Clear();
 
             //check if there is a file open
             if (!FileManager.GetInstance().CheckIfFileOpen())
             {
                 MessageBox.Show("Disassembly failed! File not opened! Please open a file first.", "Error");
-                return;
+                return null;
             }
             byte[] machine_code = FileManager.GetInstance().GetMachineCode(offset, num_bytes);
             if (machine_code == null)
             {
                 //disassemble = false;
-                return;
+                return null;
             }
             else
             {
@@ -82,11 +90,98 @@ namespace Disassembler.Core
                 }
                 else
                 {
-                    //Debug.WriteLine(decoded_instruction.name + " " + decoded_instruction.operand1 + decoded_instruction.operand2);
+                    CheckCSEnd(potential_end, decoded_instruction, ref disassemble);
+                    potential_end = TestPotentialEnd(decoded_instruction);
+                    Debug.WriteLine(decoded_instruction.name + " " + decoded_instruction.operand1 + decoded_instruction.operand2);
+                    decoded_instruction.address = instruction_pointer;
+                    decoded_instructions_list.Add(decoded_instruction);
                     instruction_pointer += decoded_instruction.length;
+                    TestForLabel(ref decoded_instruction, instruction_pointer);
                 }
                 
             }
+
+            return BuildAssemblyCode(decoded_instructions_list);
+        }
+
+
+        private bool TestPotentialEnd(Instruction decoded_instruction)
+        {
+            if (decoded_instruction.name.Equals("MOV"))
+            {
+                if (decoded_instruction.operand1.Equals("AH") && decoded_instruction.operand2.Equals(", 4CH"))
+                {
+                    return true;
+                }
+                else if (decoded_instruction.operand1.Equals("AX") && decoded_instruction.operand2.Substring(0, 5).Equals(", 4CH"))
+                {
+                    return true;
+                }
+                else
+                {
+                    return false;
+                }
+            }
+            else
+            {
+                return false;
+            }
+        }
+
+
+        private void CheckCSEnd(bool potential_end, Instruction decoded_instruction, ref bool disassemble)
+        {
+            if (potential_end)
+            {
+                if (decoded_instruction.name.Equals("INT") && decoded_instruction.operand1.Equals("21H"))
+                {
+                    disassemble = false;
+                }
+            }
+        }
+
+
+        private void UpdateLabelAt(int address)
+        {
+            if (!labels.ContainsKey(address))
+            {
+                labels.Add(address, "Label" + labels.Count + ":");
+            }
+        }
+
+
+        private void TestForLabel(ref Instruction instruction, int next_ip)
+        {
+            if (instruction.name.Contains("J") | instruction.name.Contains("LOOP"))
+            {
+                UpdateLabelAt(next_ip + Convert.ToInt32(instruction.operand1.Replace("H", string.Empty), 16));
+                if (labels.TryGetValue(next_ip, out string label))
+                {
+                    instruction.operand1 = label;
+                }
+            }
+        }
+
+
+        private List<AssemblyLine> BuildAssemblyCode(List<Instruction> instructions)
+        {
+            List<AssemblyLine> assembly_code = new List<AssemblyLine>();
+            for (int i = 0; i < instructions.Count; i++)
+            {
+                AssemblyLine assembly_line = new AssemblyLine();
+                if (labels.TryGetValue(instructions[i].address, out string label))
+                {
+                    assembly_line.text += label;
+                }
+                assembly_line.text = "\t" + instructions[i].name + "\t" + instructions[i].operand1 + "\t" + instructions[i].operand2 + Environment.NewLine;
+                assembly_code.Add(assembly_line);
+            }
+            return assembly_code;
+        }
+
+        public class AssemblyLine
+        {
+            public string text { get; set; }
         }
     }
 }
