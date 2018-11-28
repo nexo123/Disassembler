@@ -53,6 +53,45 @@ namespace Disassembler.Utils
             }
         }
 
+        public bool Write(string path, string data)
+        {
+            if (path.Length < 1)
+            {
+                path = "output.asm";
+            }
+            if (File.Exists(path))
+            {
+                try
+                {
+                    File.Delete(path);
+                    using (StreamWriter sw = new StreamWriter(path))
+                    {
+                        sw.Write(data);
+                    }
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+            else
+            {
+                try
+                {
+                    using (StreamWriter sw = new StreamWriter(path))
+                    {
+                        sw.Write(data);
+                    }
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+       
+
         public void CloseFile()
         {
             if (fs != null)

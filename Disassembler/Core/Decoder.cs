@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using Newtonsoft.Json;
 
@@ -11,6 +12,7 @@ namespace Disassembler.Core
         public byte[] machine_code { get; set; }
         protected Dictionary<string, Instruction> instruction_set;
 
+        //Dictionary mapping the REG field to the coresponding general register. Key format = REG field + W-bit.
         private Dictionary<string, string> registers = new Dictionary<string, string>()
         {
             { "0000", "AL" },
@@ -31,14 +33,17 @@ namespace Disassembler.Core
             { "1111", "DI" }
         };
 
+        //Dictionary mapping the REG field to the coresponding segment register
         private Dictionary<string, string> segment_registers = new Dictionary<string, string>()
         {
             { "000", "ES" },
             { "001", "CS" },
             { "010", "SS" },
-            { "110", "DS" }
+            { "011", "DS" }
         };
 
+        //Opcode extension dictionaries
+        #region opcode exension dictionaries
         private Dictionary<string, string> GRP1 = new Dictionary<string, string>()
         {
             { "000", "ADD" },
@@ -100,26 +105,29 @@ namespace Disassembler.Core
             { "101", "JMP" },
             { "110", "PUSH" }
         };
+        #endregion
 
+        //Dictionary mapping the R/M field to specific addressing modes in 8086.
         private Dictionary<string, string> addressing_modes = new Dictionary<string, string>()
         {
-            { "000", "BX + SI" },
-            { "001", "BX + DI" },
-            { "010", "BP + SI" },
-            { "011", "BX + DI" },
+            { "000", "BX+SI" },
+            { "001", "BX+DI" },
+            { "010", "BP+SI" },
+            { "011", "BX+DI" },
             { "100", "SI" },
             { "101", "DI" },
             { "110", "BP" },
             { "111", "BX" }
         };
 
+        //initialize instruction set at startup
         public Decoder()
         {
             InitInstructionSet();
         }
 
         /// <summary>
-        /// Simple method to parse input json file with 8086 instruction set and initialize the instruction set for the decoder.
+        /// Simple method to parse input JSON file with 8086 instruction set and initialize the instruction set for the decoder.
         /// </summary>
         private void InitInstructionSet()
         {
@@ -132,6 +140,11 @@ namespace Disassembler.Core
             }
         }
 
+        /// <summary>
+        /// Main decoding method. Tries to decode instruction at offset specified by param.
+        /// </summary>
+        /// <param name="ip">Specifies the offset pointing to first byte of the instruction to decode.</param>
+        /// <returns>Returns Instruction structure with either the decoded instruction or an error message in the "name" attribute.</returns>
         public Instruction DecodeInstructionAt(int ip)
         {
             Instruction result = new Instruction(); //Instruction structure to hold the result
@@ -141,7 +154,7 @@ namespace Disassembler.Core
             string mod = "";
             string reg = "";
 
-
+            //basic tests 
             if (machine_code == null)
             {
                 result.length = 0;
@@ -161,11 +174,25 @@ namespace Disassembler.Core
             //get the instruction based on opcode (first_byte), if successfull proceed with decoding
             if (instruction_set.TryGetValue(first_byte, out Instruction found))
             {
+                //add lenght
+                result.length += found.length;
+
                 //test if instruction has a second byte
-                if (result.length == 2)
+                if (found.length == 2)
                 {
-                    //read second byte
-                    second_byte = Convert.ToString(machine_code[ip + 1], 2).PadLeft(8, '0');
+                    //check if the second byt is withing buffer
+                    if ((ip + 1) < machine_code.Length)
+                    {
+                        //read second byte
+                        second_byte = Convert.ToString(machine_code[ip + 1], 2).PadLeft(8, '0');
+                    }
+                    else
+                    {
+                        //handle out of range error
+                        result.length = 0;
+                        result.name = "Instruction pointer out of range! IP: " + ip.ToString("X4") + "H";
+                        return result;
+                    }
 
                     //get rm, reg and mod fields
                     mod = second_byte.Substring(0, 2);
@@ -176,19 +203,37 @@ namespace Disassembler.Core
                     if (found.name.Contains("GRP"))
                     {
                         string name = DecodeOpcodeExtension(reg, found.name);
-                        result.name = name;
+                        if (name.Length > 0)
+                        {
+                            result.name = name;
+                        }
+                        else
+                        {
+                            //handle errors
+                            result.name = "Failed to decode opcode extension at " + ip.ToString("X4") + "H";
+                            result.length = 0;
+                            return result;
+                        }
+                    }
+                    else
+                    {
+                        result.name = found.name;
                     }
 
-                    //decode operands
+                    //now is the time to decode operands
                     KeyValuePair<int, string> decoded_operand = new KeyValuePair<int, string>();
                     //decode first operand
                     if (found.operand1.Equals("-")) //first operand doesn't exist, set to empty string
                     {
                         result.operand1 = "";
                     }
+                    else if (registers.ContainsValue(found.operand1) || segment_registers.ContainsValue(found.operand1)) //check if operand is found in register dictionaries
+                    {
+                        result.operand1 = found.operand1;
+                    }
                     else //else decode operand
                     {
-                        decoded_operand = DecodeOperand(found.operand1, mod, reg, rm, ip); //set _rm, _mod and _reg params to XX as we don't have MODR/M byte
+                        decoded_operand = DecodeOperand(found.operand1, mod, reg, rm, ip);
                         if (decoded_operand.Key < 0)
                         {
                             //handle errors
@@ -208,9 +253,13 @@ namespace Disassembler.Core
                     {
                         result.operand2 = "";
                     }
+                    else if (registers.ContainsValue(found.operand2) || segment_registers.ContainsValue(found.operand2)) //check if operand is found in register dictionaries
+                    {
+                        result.operand2 = ", " + found.operand2;
+                    }
                     else //else decode operand
                     {
-                        decoded_operand = DecodeOperand(found.operand2, mod, reg, rm, ip); //set _rm, _mod and _reg params to XX as we don't have MODR/M byte
+                        decoded_operand = DecodeOperand(found.operand2, mod, reg, rm, ip);
                         if (decoded_operand.Key < 0)
                         {
                             //handle errors
@@ -227,15 +276,16 @@ namespace Disassembler.Core
                 }
                 else //decode operands, no MODR/M byte
                 {
+                    result.name = found.name;
                     KeyValuePair<int, string> decoded_operand = new KeyValuePair<int, string>();
                     //decode first operand
                     if (found.operand1.Equals("-")) //first operand doesn't exist, set to empty string
                     {
                         result.operand1 = "";
                     }
-                    else if (registers.ContainsValue(found.operand1) || segment_registers.ContainsValue(found.operand1)) //first operand is found in register dictionaries
+                    else if (registers.ContainsValue(found.operand1) || segment_registers.ContainsValue(found.operand1)) //check if operand is found in register dictionaries
                     {
-                        //do nothing, operand is already decoded
+                        result.operand1 = found.operand1;
                     }
                     else //else decode operand
                     {
@@ -259,9 +309,9 @@ namespace Disassembler.Core
                     {
                         result.operand2 = "";
                     }
-                    else if (registers.ContainsValue(found.operand2) || segment_registers.ContainsValue(found.operand2)) //second operand is found in register dictionaries
+                    else if (registers.ContainsValue(found.operand2) || segment_registers.ContainsValue(found.operand2)) //check if operand is found in register dictionaries
                     {
-                        //do nothing, operand is already decoded
+                        result.operand2 = ", " + found.operand2;
                     }
                     else //else decode operand
                     {
@@ -286,21 +336,21 @@ namespace Disassembler.Core
                 result = new Instruction
                 {
                     length = 0,
-                    name = "Instruction opcode not found! Please consider updating the instruction set."
+                    name = "Instruction opcode (" + first_byte + "H) not found! Please consider updating the instruction set."
                 };
                 return result;
             }
-
             return result;
         }
 
+        #region operand decoding methods
         /// <summary>
         /// Method decodes instruction operand.
         /// </summary>
         /// <param name="_operand">Operand code.</param>
-        /// <param name="_mod">2 bit MOD field.</param>
-        /// <param name="_reg">3 bit REG field.</param>
-        /// <param name="_rm">3 bit R/M field.</param>
+        /// <param name="_mod">2 bit MOD field. Set to "XX" if no MOD field</param>
+        /// <param name="_reg">3 bit REG field. Set to "XX" if no REG field</param>
+        /// <param name="_rm">3 bit R/M field. Set to "XX" if no R/M field</param>
         /// <param name="ip">Current value of the instruction pointer.</param>
         /// <returns>Key value pair of number of bytes decoded as key + decoded operand as value.</returns>
         private KeyValuePair<int, string> DecodeOperand(string _operand, string _mod, string _reg, string _rm, int ip)
@@ -308,6 +358,8 @@ namespace Disassembler.Core
             KeyValuePair<int, string> operand;
             string first = "";
             string second = "";
+
+            //split the operand code
             if (_operand.Length > 1)
             {
                 first = _operand.Substring(0, 1);
@@ -336,8 +388,8 @@ namespace Disassembler.Core
                 case "J": //The instruction contains a relative offset to be added to the address of the subsequent instruction. Applicable, e.g., to short JMP (opcode EB), or LOOP
                     operand = DecodeJumpOperand(ip, second);
                     break;
-                case "M": //The ModR/M byte may refer only to memory. Applicable, e.g., to LES and LDS.
-                    operand = new KeyValuePair<int, string>(-1, "Decoding operand failed! Operand code: " + _operand);
+                case "M": //The ModR/M byte refers to a memory location, however the contents of that memory location are irrelevant; the address itself is the operand of the instruction. Applicable, e.g., to LEA
+                    operand = DecodeGeneralOperand(ip, second, _mod, _rm, _reg);
                     break;
                 case "O": //The instruction has no ModR/M byte; the offset of the operand is encoded as a WORD in the instruction. Applicable, e.g., to certain MOVs (opcodes A0 through A3).
                     operand = new KeyValuePair<int, string>(2, Convert.ToString(machine_code[ip + 2], 16).ToUpper().PadLeft(2, '0') + 
@@ -346,6 +398,12 @@ namespace Disassembler.Core
                 case "S": //The reg field of the ModR/ M byte selects a segment register.
                     operand = DecodeSregOperand(_reg);
                     break;
+                case "1": //A constant argument of 1, implicit in the opcode, and not represented elsewhere in the instruction. This argument *is* displayed in assembly code.
+                    operand = new KeyValuePair<int, string>(0, "01H");
+                    break;
+                case "3": //A constant argument of 3, implicit in the opcode, and not represented elsewhere in the instruction. This argument *is* displayed in assembly code.
+                    operand = new KeyValuePair<int, string>(0, "03H");
+                    break;
                 default:
                     operand = new KeyValuePair<int, string>(-1, "Decoding operand failed! Operand code: " + _operand);
                     break;
@@ -353,61 +411,81 @@ namespace Disassembler.Core
             return operand;
         }
 
-
+        /// <summary>
+        /// Method to decode 32b segment:offset pointer.
+        /// </summary>
+        /// <param name="ip">Current value of instruction pointer</param>
+        /// <returns>Key value pair of number of bytes decoded as key + decoded operand as value or an error message if the decoding fails.</returns>
         private KeyValuePair<int, string> Decode32bAddress(int ip)
         {
-            return new KeyValuePair<int, string>(4, "[" + Convert.ToString(machine_code[ip + 2], 16).ToUpper().PadLeft(2, '0') +
-                    Convert.ToString(machine_code[ip + 1], 16).ToUpper().PadLeft(2, '0') + ":" + 
-                    Convert.ToString(machine_code[ip + 4], 16).ToUpper().PadLeft(2, '0') +
-                    Convert.ToString(machine_code[ip + 3], 16).ToUpper().PadLeft(2, '0') + "H]");
+            return ip + 4 >= machine_code.Length
+                ? new KeyValuePair<int, string>(-1, "Index out of range when decoding A-type operand!")
+                : new KeyValuePair<int, string>(4, "[" + Convert.ToString(machine_code[ip + 2], 16).ToUpper().PadLeft(2, '0') +
+                        Convert.ToString(machine_code[ip + 1], 16).ToUpper().PadLeft(2, '0') + ":" +
+                        Convert.ToString(machine_code[ip + 4], 16).ToUpper().PadLeft(2, '0') +
+                        Convert.ToString(machine_code[ip + 3], 16).ToUpper().PadLeft(2, '0') + "H]");
         }
 
-
+        /// <summary>
+        /// Simple method to decode segment register.
+        /// </summary>
+        /// <param name="_reg">MODR/M byte REG field.</param>
+        /// <returns>Key value pair of number of bytes decoded as key + decoded operand as value or an error message if the decoding fails.</returns>
         private KeyValuePair<int, string> DecodeSregOperand(string _reg)
         {
-            if (segment_registers.TryGetValue(_reg, out string sreg))
-            {
-                return new KeyValuePair<int, string>(0, sreg);
-            }
-            return new KeyValuePair<int, string>(-1, "Decoding segment register failed!");
+            return segment_registers.TryGetValue(_reg, out string sreg)
+                ? new KeyValuePair<int, string>(0, sreg)
+                : new KeyValuePair<int, string>(-1, "Decoding segment register failed!");
         }
 
-
+        /// <summary>
+        /// Simple method to decode general register.
+        /// </summary>
+        /// <param name="_reg">MODR/M byte REG field.</param>
+        /// <param name="second">W-bit</param>
+        /// <returns>Key value pair of number of bytes decoded as key + decoded operand as value or an error message if the decoding fails.</returns>
         private KeyValuePair<int, string> DecodeRegOperand(string _reg, string second)
         {
-            string tmp = "";
             //we need to append either 1 or 0 to the reg field based on W bit.
-            if (second.Equals("w") || second.Equals("v"))
-            {
-                tmp = _reg + "1";
-            }
-            else
-            {
-                tmp = _reg + "0";
-            }
-
-            if (segment_registers.TryGetValue(tmp, out string reg))
-            {
-                return new KeyValuePair<int, string>(0, reg);
-            }
-            return new KeyValuePair<int, string>(-1, "Decoding register failed!");
+            string tmp = second.Equals("w") || second.Equals("v") ? _reg + "1" : _reg + "0";
+            return registers.TryGetValue(tmp, out string reg)
+                ? new KeyValuePair<int, string>(0, reg)
+                : new KeyValuePair<int, string>(-1, "Decoding general register failed!");
         }
 
-
+        /// <summary>
+        /// Simple method to decode jump instruction relative offset.
+        /// </summary>
+        /// <param name="ip">Current value of the instruction pointer</param>
+        /// <param name="second">W-bit</param>
+        /// <returns>Key value pair of number of bytes decoded as key + decoded operand as value or an error message if the decoding fails.</returns>
         private KeyValuePair<int, string> DecodeJumpOperand(int ip, string second)
         {
             if (second.Equals("w") || second.Equals("v"))
             {
-                return new KeyValuePair<int, string>(2, Convert.ToString(machine_code[ip + 2], 16).ToUpper().PadLeft(2, '0') +
-                    Convert.ToString(machine_code[ip + 1], 16).ToUpper().PadLeft(2, '0') + "H");
+                return ip + 2 >= machine_code.Length
+                    ? new KeyValuePair<int, string>(-1, "Index out of range when decoding J-type operand!")
+                    : new KeyValuePair<int, string>(2, Convert.ToString(machine_code[ip + 2], 16).ToUpper().PadLeft(2, '0') +
+                        Convert.ToString(machine_code[ip + 1], 16).ToUpper().PadLeft(2, '0') + "H");
             }
             else
             {
-                return new KeyValuePair<int, string>(1, Convert.ToString(machine_code[ip + 1], 16).ToUpper().PadLeft(2, '0') + "H");
+                return ip + 1 >= machine_code.Length
+                    ? new KeyValuePair<int, string>(-1, "Index out of range when decoding J-type operand!")
+                    : new KeyValuePair<int, string>(1, Convert.ToString(machine_code[ip + 1], 16).ToUpper().PadLeft(2, '0') + "H");
             }
+            
         }
 
-
+        /// <summary>
+        /// Method decodes E-type operand, can be register or memory based on MOD field.
+        /// </summary>
+        /// <param name="ip">Current value of the instruction pointer.</param>
+        /// <param name="second">W-bit.</param>
+        /// <param name="mod">MODR/M byte MOD field.</param>
+        /// <param name="rm">MODR/M byte R/M field.</param>
+        /// <param name="reg">MODR/M byte REG field.</param>
+        /// <returns>Key value pair of number of bytes decoded as key + decoded operand as value or an error message if the decoding fails.</returns>
         private KeyValuePair<int, string> DecodeGeneralOperand(int ip, string second, string mod, string rm, string reg)
         {
             string addrmode = "";
@@ -416,24 +494,23 @@ namespace Disassembler.Core
                 case "00": //No displacement unless RM field is set to 110 = then direct 16b address
                     if (rm.Equals("110"))
                     {
-                        return new KeyValuePair<int, string>(2, "[" + Convert.ToString(machine_code[ip + 3], 16).ToUpper().PadLeft(2, '0') +
+                        return ip + 3 >= machine_code.Length
+                            ? new KeyValuePair<int, string>(-1, "Index out of range when decoding E-type operand mod 00!")
+                            : new KeyValuePair<int, string>(2, "[" + Convert.ToString(machine_code[ip + 3], 16).ToUpper().PadLeft(2, '0') +
                                 Convert.ToString(machine_code[ip + 2], 16).ToUpper().PadLeft(2, '0') + "H]");
                     }
                     else
                     {
-                        if (addressing_modes.TryGetValue(rm, out addrmode))
-                        {
-                            return new KeyValuePair<int, string>(0, "[" + addrmode + "]");
-                        }
-                        else
-                        {
-                            return new KeyValuePair<int, string>(-1, "Decoding general operand failed!");
-                        }
+                        return addressing_modes.TryGetValue(rm, out addrmode)
+                            ? new KeyValuePair<int, string>(0, "[" + addrmode + "]")
+                            : new KeyValuePair<int, string>(-1, "Decoding general operand failed!");
                     }
                 case "01": //8b displacement
                     if (addressing_modes.TryGetValue(rm, out addrmode))
                     {
-                        return new KeyValuePair<int, string>(1, "[" + addrmode + Convert.ToString(machine_code[ip + 2], 16).ToUpper().PadLeft(2, '0') + "H]");
+                        return ip + 2 >= machine_code.Length
+                            ? new KeyValuePair<int, string>(-1, "Index out of range when decoding E-type operand mod 01!")
+                            : new KeyValuePair<int, string>(1, "[" + addrmode + "+" + Convert.ToString(machine_code[ip + 2], 16).ToUpper().PadLeft(2, '0') + "H]");
                     }
                     else
                     {
@@ -442,20 +519,30 @@ namespace Disassembler.Core
                 case "10": //16b displacement
                     if (addressing_modes.TryGetValue(rm, out addrmode))
                     {
-                        return new KeyValuePair<int, string>(2, "[" + addrmode + Convert.ToString(machine_code[ip + 3], 16).ToUpper().PadLeft(2, '0') + Convert.ToString(machine_code[ip + 2], 16).ToUpper().PadLeft(2, '0') + "H]");
+                        return ip + 3 >= machine_code.Length
+                            ? new KeyValuePair<int, string>(-1, "Index out of range when decoding E-type operand mod 10!")
+                            : new KeyValuePair<int, string>(2, "[" + addrmode + "+" + Convert.ToString(machine_code[ip + 3], 16).ToUpper().PadLeft(2, '0') + 
+                                Convert.ToString(machine_code[ip + 2], 16).ToUpper().PadLeft(2, '0') + "H]");
                     }
                     else
                     {
                         return new KeyValuePair<int, string>(-1, "Decoding general operand failed!");
                     }
                 case "11": //Register
-                    return DecodeRegOperand(reg, second);
+                    return DecodeRegOperand(rm, second);
                 default:
-                    return new KeyValuePair<int, string>(-1, "Decoding immediate operand failed!");
+                    return new KeyValuePair<int, string>(-1, "Decoding general operand failed!");
             }
         }
 
-
+        /// <summary>
+        /// Method that decodes immediate operand.
+        /// </summary>
+        /// <param name="ip">Current value of the instruction pointer.</param>
+        /// <param name="second">W-bit</param>
+        /// <param name="mod">MODR/M byte MOD field. Please set to "XX" if no MOD field is present.</param>
+        /// <param name="rm">MODR/M byte R/M field. Please set to "XX" if no R/M field is present.</param>
+        /// <returns>Key value pair of number of bytes decoded as key + decoded operand as value or an error message if the decoding fails.</returns>
         private KeyValuePair<int, string> DecodeImmediateOperand(int ip, string second, string mod, string rm)
         {
             switch (mod)
@@ -463,72 +550,97 @@ namespace Disassembler.Core
                 case "XX": //No MODR/M byte
                     if (second.Equals("w") || second.Equals("v"))
                     {
-                        return new KeyValuePair<int, string>(2, Convert.ToString(machine_code[ip + 2], 16).ToUpper().PadLeft(2, '0') +
-                            Convert.ToString(machine_code[ip + 1], 16).ToUpper().PadLeft(2, '0') + "H");
+                        return ip + 2 >= machine_code.Length
+                            ? new KeyValuePair<int, string>(-1, "Index out of range when decoding I-type operand!")
+                            : new KeyValuePair<int, string>(2, Convert.ToString(machine_code[ip + 2], 16).ToUpper().PadLeft(2, '0') +
+                                Convert.ToString(machine_code[ip + 1], 16).ToUpper().PadLeft(2, '0') + "H");
                     }
                     else
                     {
-                        return new KeyValuePair<int, string>(1, Convert.ToString(machine_code[ip + 1], 16).ToUpper().PadLeft(2, '0') + "H");
+                        return ip + 1 >= machine_code.Length
+                            ? new KeyValuePair<int, string>(-1, "Index out of range when decoding I-type operand!")
+                            : new KeyValuePair<int, string>(1, Convert.ToString(machine_code[ip + 1], 16).ToUpper().PadLeft(2, '0') + "H");
                     }
-                case "00": //No displacement unless RM field is set to 110 = then direct 16b address
+                case "00": //No displacement unless RM field is set to 110 = then direct 16b address before immediate
                     if (rm.Equals("110"))
                     {
                         if (second.Equals("w") || second.Equals("v"))
                         {
-                            return new KeyValuePair<int, string>(2, Convert.ToString(machine_code[ip + 5], 16).ToUpper().PadLeft(2, '0') +
-                                Convert.ToString(machine_code[ip + 4], 16).ToUpper().PadLeft(2, '0') + "H");
+                            return ip + 5 >= machine_code.Length
+                                ? new KeyValuePair<int, string>(-1, "Index out of range when decoding I-type operand!")
+                                : new KeyValuePair<int, string>(2, Convert.ToString(machine_code[ip + 5], 16).ToUpper().PadLeft(2, '0') +
+                                    Convert.ToString(machine_code[ip + 4], 16).ToUpper().PadLeft(2, '0') + "H");
                         }
                         else
                         {
-                            return new KeyValuePair<int, string>(1, Convert.ToString(machine_code[ip + 4], 16).ToUpper().PadLeft(2, '0') + "H");
+                            return ip + 4 >= machine_code.Length
+                                ? new KeyValuePair<int, string>(-1, "Index out of range when decoding I-type operand!")
+                                : new KeyValuePair<int, string>(1, Convert.ToString(machine_code[ip + 4], 16).ToUpper().PadLeft(2, '0') + "H");
                         }
                     }
                     else
                     {
                         if (second.Equals("w") || second.Equals("v"))
                         {
-                            return new KeyValuePair<int, string>(2, Convert.ToString(machine_code[ip + 3], 16).ToUpper().PadLeft(2, '0') +
-                                Convert.ToString(machine_code[ip + 2], 16).ToUpper().PadLeft(2, '0') + "H");
+                            return ip + 3 >= machine_code.Length
+                                ? new KeyValuePair<int, string>(-1, "Index out of range when decoding I-type operand!")
+                                : new KeyValuePair<int, string>(2, Convert.ToString(machine_code[ip + 3], 16).ToUpper().PadLeft(2, '0') +
+                                    Convert.ToString(machine_code[ip + 2], 16).ToUpper().PadLeft(2, '0') + "H");
                         }
                         else
                         {
-                            return new KeyValuePair<int, string>(1, Convert.ToString(machine_code[ip + 2], 16).ToUpper().PadLeft(2, '0') + "H");
+                            return ip + 2 >= machine_code.Length
+                                ? new KeyValuePair<int, string>(-1, "Index out of range when decoding I-type operand!")
+                                : new KeyValuePair<int, string>(1, Convert.ToString(machine_code[ip + 2], 16).ToUpper().PadLeft(2, '0') + "H");
                         }
                     }
                 case "01": //8b displacement before immediate
                     if (second.Equals("w") || second.Equals("v"))
                     {
-                        return new KeyValuePair<int, string>(2, Convert.ToString(machine_code[ip + 4], 16).ToUpper().PadLeft(2, '0') +
-                            Convert.ToString(machine_code[ip + 3], 16).ToUpper().PadLeft(2, '0') + "H");
+                        return ip + 4 >= machine_code.Length
+                                ? new KeyValuePair<int, string>(-1, "Index out of range when decoding I-type operand!")
+                                : new KeyValuePair<int, string>(2, Convert.ToString(machine_code[ip + 4], 16).ToUpper().PadLeft(2, '0') +
+                                    Convert.ToString(machine_code[ip + 3], 16).ToUpper().PadLeft(2, '0') + "H");
                     }
                     else
                     {
-                        return new KeyValuePair<int, string>(1, Convert.ToString(machine_code[ip + 3], 16).ToUpper().PadLeft(2, '0') + "H");
+                        return ip + 3 >= machine_code.Length
+                                ? new KeyValuePair<int, string>(-1, "Index out of range when decoding I-type operand!")
+                                : new KeyValuePair<int, string>(1, Convert.ToString(machine_code[ip + 3], 16).ToUpper().PadLeft(2, '0') + "H");
                     }
                 case "10": //16b displacement before immediate
                     if (second.Equals("w") || second.Equals("v"))
                     {
-                        return new KeyValuePair<int, string>(2, Convert.ToString(machine_code[ip + 5], 16).ToUpper().PadLeft(2, '0') +
-                            Convert.ToString(machine_code[ip + 4], 16).ToUpper().PadLeft(2, '0') + "H");
+                        return ip + 5 >= machine_code.Length
+                                ? new KeyValuePair<int, string>(-1, "Index out of range when decoding I-type operand!")
+                                : new KeyValuePair<int, string>(2, Convert.ToString(machine_code[ip + 5], 16).ToUpper().PadLeft(2, '0') +
+                                    Convert.ToString(machine_code[ip + 4], 16).ToUpper().PadLeft(2, '0') + "H");
                     }
                     else
                     {
-                        return new KeyValuePair<int, string>(1, Convert.ToString(machine_code[ip + 4], 16).ToUpper().PadLeft(2, '0') + "H");
+                        return ip + 4 >= machine_code.Length
+                                ? new KeyValuePair<int, string>(-1, "Index out of range when decoding I-type operand!") 
+                                : new KeyValuePair<int, string>(1, Convert.ToString(machine_code[ip + 4], 16).ToUpper().PadLeft(2, '0') + "H");
                     }
                 case "11": //Immediate to register
                     if (second.Equals("w") || second.Equals("v"))
                     {
-                        return new KeyValuePair<int, string>(2, Convert.ToString(machine_code[ip + 3], 16).ToUpper().PadLeft(2, '0') +
-                            Convert.ToString(machine_code[ip + 2], 16).ToUpper().PadLeft(2, '0') + "H");
+                        return ip + 3 >= machine_code.Length
+                                ? new KeyValuePair<int, string>(-1, "Index out of range when decoding I-type operand!")
+                                : new KeyValuePair<int, string>(2, Convert.ToString(machine_code[ip + 3], 16).ToUpper().PadLeft(2, '0') +
+                                    Convert.ToString(machine_code[ip + 2], 16).ToUpper().PadLeft(2, '0') + "H");
                     }
                     else
                     {
-                        return new KeyValuePair<int, string>(1, Convert.ToString(machine_code[ip + 2], 16).ToUpper().PadLeft(2, '0') + "H");
+                        return ip + 2 >= machine_code.Length
+                                ? new KeyValuePair<int, string>(-1, "Index out of range when decoding I-type operand!")
+                                : new KeyValuePair<int, string>(1, Convert.ToString(machine_code[ip + 2], 16).ToUpper().PadLeft(2, '0') + "H");
                     }
                 default:
                     return new KeyValuePair<int, string>(-1, "Decoding immediate operand failed!");
             }
         }
+        #endregion
 
         /// <summary>
         /// Simple method to decode opcode extension and transform it to actual instruction.
@@ -540,56 +652,30 @@ namespace Disassembler.Core
         {
             if (group.Equals("GRP1"))
             {
-                string name = "";
-                if (GRP1.TryGetValue(_reg, out name))
-                {
-                    return name;
-                }
-                return "";
+                return GRP1.TryGetValue(_reg, out string name) ? name : "";
             }
             else if (group.Equals("GRP2"))
             {
-                string name = "";
-                if (GRP2.TryGetValue(_reg, out name))
-                {
-                    return name;
-                }
-                return "";
+                return GRP2.TryGetValue(_reg, out string name) ? name : "";
             }
             else if (group.Equals("GRP3a"))
             {
-                string name = "";
-                if (GRP3A.TryGetValue(_reg, out name))
-                {
-                    return name;
-                }
-                return "";
+                return GRP3A.TryGetValue(_reg, out string name) ? name : "";
             }
             else if (group.Equals("GRP3b"))
             {
-                string name = "";
-                if (GRP3B.TryGetValue(_reg, out name))
-                {
-                    return name;
-                }
-                return "";
+                return GRP3B.TryGetValue(_reg, out string name) ? name : "";
             }
             else if (group.Equals("GRP4"))
             {
-                string name = "";
-                if (GRP4.TryGetValue(_reg, out name))
-                {
-                    return name;
-                }
-                return "";
+                return GRP4.TryGetValue(_reg, out string name) ? name : "";
+            }
+            else if (group.Equals("GRP5"))
+            {
+                return GRP5.TryGetValue(_reg, out string name) ? name : "";
             }
             else
             {
-                string name = "";
-                if (GRP5.TryGetValue(_reg, out name))
-                {
-                    return name;
-                }
                 return "";
             }
         }
@@ -604,6 +690,7 @@ namespace Disassembler.Core
         public string opcode { get; set; }
         public string name { get; set; }
         public int length { get; set; }
+        public int address { get; set; }
         public string operand1 { get; set; }
         public string operand2 { get; set; }
     }
