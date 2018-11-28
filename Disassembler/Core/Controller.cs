@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Windows.Forms;
 using Disassembler.Utils;
 
@@ -10,12 +9,13 @@ namespace Disassembler.Core
     {
         private static Controller instance;
         private Decoder decoder;
-        private Dictionary<int, string> labels = new Dictionary<int, string>();
+        private Dictionary<int, string> labels = new Dictionary<int, string>();  //dictionary with labels
 
         private Controller()
         {
             decoder = new Decoder();
         }
+
 
         public static Controller GetInstance()
         {
@@ -24,22 +24,6 @@ namespace Disassembler.Core
                 instance = new Controller();
             }
             return instance;
-        }
-
-        /// <summary>
-        /// When a file is opened, initialize the controller so it is ready to disassemble.
-        /// </summary>
-        /// <param name="file_path">Path to the file the user is trying to disassemble.</param>
-        /// <returns></returns>
-        public string Init(string file_path)
-        {
-            FileManager.GetInstance().Open(file_path);
-            return FileManager.GetInstance().FileToHex();
-        }
-
-        private void SetInstructionPointer(ref int instruction_pointer)
-        {
-            instruction_pointer = FileManager.GetInstance().GetHeaderSize();
         }
 
 
@@ -93,9 +77,9 @@ namespace Disassembler.Core
                     CheckCSEnd(potential_end, decoded_instruction, ref disassemble);
                     potential_end = TestPotentialEnd(decoded_instruction);
                     decoded_instruction.address = instruction_pointer;
-                    decoded_instructions_list.Add(decoded_instruction);
                     instruction_pointer += decoded_instruction.length;
                     TestForLabel(ref decoded_instruction, instruction_pointer);
+                    decoded_instructions_list.Add(decoded_instruction);
                 }
                 
             }
@@ -111,7 +95,7 @@ namespace Disassembler.Core
                 {
                     return true;
                 }
-                else if (decoded_instruction.operand1.Equals("AX") && decoded_instruction.operand2.Substring(0, 5).Equals(", 4CH"))
+                else if (decoded_instruction.operand1.Equals("AX") && decoded_instruction.operand2.Substring(0, 4).Equals(", 4C"))
                 {
                     return true;
                 }
@@ -139,29 +123,29 @@ namespace Disassembler.Core
         }
 
 
-        private void UpdateLabelAt(int address)
-        {
-            if (!labels.ContainsKey(address))
-            {
-                labels.Add(address, "Label" + labels.Count + ":");
-            }
-        }
-
-
         private void TestForLabel(ref Instruction instruction, int next_ip)
         {
             if (instruction.name.Contains("J") | instruction.name.Contains("LOOP"))
             {
-                int jump_address = next_ip + Convert.ToInt32(instruction.operand1.Replace("H", string.Empty), 16);
-                UpdateLabelAt(jump_address);
-                if (labels.TryGetValue(jump_address, out string label))
+                int jump_address = next_ip + Convert.ToSByte(instruction.operand1.Replace("H", string.Empty), 16);
+                if (!labels.ContainsKey(jump_address))
                 {
-                    instruction.operand1 = label.Replace(":", "");
+                    labels.Add(jump_address, Environment.NewLine + "Label" + labels.Count + ":");
+                    instruction.operand1 = "Label" + (labels.Count - 1);
+                }
+                else
+                {
+                    labels.TryGetValue(jump_address, out string label);
+                    instruction.operand1 = label.Replace(":", string.Empty).Replace(Environment.NewLine, string.Empty);
                 }
             }
         }
 
-
+        /// <summary>
+        /// Create a list of strings, each representing one line in assembly source file.
+        /// </summary>
+        /// <param name="instructions">List of decoded instructions.</param>
+        /// <returns>Linked list of assembly code strings.</returns>
         private List<string> BuildAssemblyCode(List<Instruction> instructions)
         {
             List<string> assembly_code = new List<string>();

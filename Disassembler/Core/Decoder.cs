@@ -12,6 +12,7 @@ namespace Disassembler.Core
         public byte[] machine_code { get; set; }
         protected Dictionary<string, Instruction> instruction_set;
 
+        //Dictionary mapping the REG field to the coresponding general register. Key format = REG field + W-bit.
         private Dictionary<string, string> registers = new Dictionary<string, string>()
         {
             { "0000", "AL" },
@@ -32,6 +33,7 @@ namespace Disassembler.Core
             { "1111", "DI" }
         };
 
+        //Dictionary mapping the REG field to the coresponding segment register
         private Dictionary<string, string> segment_registers = new Dictionary<string, string>()
         {
             { "000", "ES" },
@@ -40,6 +42,8 @@ namespace Disassembler.Core
             { "011", "DS" }
         };
 
+        //Opcode extension dictionaries
+        #region opcode exension dictionaries
         private Dictionary<string, string> GRP1 = new Dictionary<string, string>()
         {
             { "000", "ADD" },
@@ -101,7 +105,9 @@ namespace Disassembler.Core
             { "101", "JMP" },
             { "110", "PUSH" }
         };
+        #endregion
 
+        //Dictionary mapping the R/M field to specific addressing modes in 8086.
         private Dictionary<string, string> addressing_modes = new Dictionary<string, string>()
         {
             { "000", "BX+SI" },
@@ -138,7 +144,7 @@ namespace Disassembler.Core
         /// Main decoding method. Tries to decode instruction at offset specified by param.
         /// </summary>
         /// <param name="ip">Specifies the offset pointing to first byte of the instruction to decode.</param>
-        /// <returns>Returns Instruction structure with either the decoded instruction or error message in the "name" attribute.</returns>
+        /// <returns>Returns Instruction structure with either the decoded instruction or an error message in the "name" attribute.</returns>
         public Instruction DecodeInstructionAt(int ip)
         {
             Instruction result = new Instruction(); //Instruction structure to hold the result
@@ -203,6 +209,7 @@ namespace Disassembler.Core
                         }
                         else
                         {
+                            //handle errors
                             result.name = "Failed to decode opcode extension at " + ip.ToString("X4") + "H";
                             result.length = 0;
                             return result;
@@ -213,14 +220,14 @@ namespace Disassembler.Core
                         result.name = found.name;
                     }
 
-                    //decode operands
+                    //now is the time to decode operands
                     KeyValuePair<int, string> decoded_operand = new KeyValuePair<int, string>();
                     //decode first operand
                     if (found.operand1.Equals("-")) //first operand doesn't exist, set to empty string
                     {
                         result.operand1 = "";
                     }
-                    else if (registers.ContainsValue(found.operand1) || segment_registers.ContainsValue(found.operand1)) //second operand is found in register dictionaries
+                    else if (registers.ContainsValue(found.operand1) || segment_registers.ContainsValue(found.operand1)) //check if operand is found in register dictionaries
                     {
                         result.operand1 = found.operand1;
                     }
@@ -246,9 +253,9 @@ namespace Disassembler.Core
                     {
                         result.operand2 = "";
                     }
-                    else if (registers.ContainsValue(found.operand2) || segment_registers.ContainsValue(found.operand2)) //second operand is found in register dictionaries
+                    else if (registers.ContainsValue(found.operand2) || segment_registers.ContainsValue(found.operand2)) //check if operand is found in register dictionaries
                     {
-                        result.operand2 = found.operand2;
+                        result.operand2 = ", " + found.operand2;
                     }
                     else //else decode operand
                     {
@@ -276,7 +283,7 @@ namespace Disassembler.Core
                     {
                         result.operand1 = "";
                     }
-                    else if (registers.ContainsValue(found.operand1) || segment_registers.ContainsValue(found.operand1)) //first operand is found in register dictionaries
+                    else if (registers.ContainsValue(found.operand1) || segment_registers.ContainsValue(found.operand1)) //check if operand is found in register dictionaries
                     {
                         result.operand1 = found.operand1;
                     }
@@ -302,9 +309,9 @@ namespace Disassembler.Core
                     {
                         result.operand2 = "";
                     }
-                    else if (registers.ContainsValue(found.operand2) || segment_registers.ContainsValue(found.operand2)) //second operand is found in register dictionaries
+                    else if (registers.ContainsValue(found.operand2) || segment_registers.ContainsValue(found.operand2)) //check if operand is found in register dictionaries
                     {
-                        result.operand2 = found.operand2;
+                        result.operand2 = ", " + found.operand2;
                     }
                     else //else decode operand
                     {
@@ -336,6 +343,7 @@ namespace Disassembler.Core
             return result;
         }
 
+        #region operand decoding methods
         /// <summary>
         /// Method decodes instruction operand.
         /// </summary>
@@ -350,6 +358,8 @@ namespace Disassembler.Core
             KeyValuePair<int, string> operand;
             string first = "";
             string second = "";
+
+            //split the operand code
             if (_operand.Length > 1)
             {
                 first = _operand.Substring(0, 1);
@@ -630,6 +640,7 @@ namespace Disassembler.Core
                     return new KeyValuePair<int, string>(-1, "Decoding immediate operand failed!");
             }
         }
+        #endregion
 
         /// <summary>
         /// Simple method to decode opcode extension and transform it to actual instruction.

@@ -99,6 +99,11 @@ namespace Disassembler.Utils
             return sb.ToString();
         }
 
+        public bool WriteFile(string path, string data)
+        {
+            return iostream.Write(path, data);
+        }
+
         public byte[] GetMachineCode(int offset, int num_bytes)
         {
             byte[] machine_code = null;

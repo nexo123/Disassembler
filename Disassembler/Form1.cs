@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Text;
 using System.Windows.Forms;
 using Disassembler.Core;
+using Disassembler.Utils;
 
 namespace Disassembler
 {
@@ -20,12 +22,13 @@ namespace Disassembler
         private void open_file_button_Click(object sender, EventArgs e)
         {
             OpenFileDialog openFileDialog = new OpenFileDialog();
+            openFileDialog.Title = "Open source file";
             if (openFileDialog.ShowDialog() == DialogResult.OK)
             {
+                richTextBox1.Clear();
                 file_path = openFileDialog.FileName;
-                //Debug.WriteLine(file_path);
-                richTextBox1.Text = Controller.GetInstance().Init(file_path);
-
+                FileManager.GetInstance().Open(file_path);
+                richTextBox1.Text = FileManager.GetInstance().FileToHex();
             }
             else if (openFileDialog.ShowDialog() == DialogResult.Cancel)
             {
@@ -33,7 +36,7 @@ namespace Disassembler
             }
             else
             {
-
+                MessageBox.Show("File opening failed!", "Error");
             }
         }
 
@@ -188,6 +191,49 @@ namespace Disassembler
             {
                 num_bytes = 0;
                 numBytes_label.Text = "Length:" + Environment.NewLine + "0";
+            }
+        }
+
+        private void save_button_Click(object sender, EventArgs e)
+        {
+            save_file("");
+        }
+
+        private void saveas_button_Click(object sender, EventArgs e)
+        {
+            SaveFileDialog saveFileDialog = new SaveFileDialog();
+            saveFileDialog.Filter = "Assembly file|*.asm|Text file|*.txt";
+            saveFileDialog.Title = "Save the output";
+            if (saveFileDialog.ShowDialog() == DialogResult.OK)
+            {
+                /*if (FileManager.GetInstance().CheckIfFileExists(saveFileDialog.FileName))
+                {
+                    if (MessageBox.Show("Are you sure to overwrite?", "Are you sure?", MessageBoxButtons.YesNo) == DialogResult.Yes)
+                    {
+                        save_file();
+                    }
+                    else
+                    {
+                        MessageBox.Show("Save cancelled!", "Error");
+                    }
+                }*/
+                save_file(saveFileDialog.FileName);
+                    
+            }
+        }
+
+        private void save_file(string path)
+        {
+            StringBuilder sb = new StringBuilder();
+            sb.Append("\t.mode small" + Environment.NewLine + "\t.code" + Environment.NewLine);
+            foreach (string str in output)
+            {
+                sb.Append(str);
+            }
+            sb.Append("\tend");
+            if (!FileManager.GetInstance().WriteFile(path, sb.ToString()))
+            {
+                MessageBox.Show("Saving file failed!", "Error");
             }
         }
     }
