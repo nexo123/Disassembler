@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using System.Windows.Forms;
 using Disassembler.Core;
@@ -43,6 +44,12 @@ namespace Disassembler
             if (FileManager.GetInstance().Open(path))
             {
                 cleanup();
+                int[] tmp = new int[15];
+                for (int i = 0; i < tmp.Length; i++)
+                {
+                    tmp[i] = (i + 1) * 28;
+                }
+                richTextBox1.SelectionTabs = tmp;
                 richTextBox1.Text = FileManager.GetInstance().FileToHex();
                 tabControl1.SelectedIndex = 0;
                 string[] parts = path.Split('\\');
