@@ -171,11 +171,36 @@ namespace Disassembler.Core
             //read first byte
             first_byte = Convert.ToString(machine_code[ip], 16).PadLeft(2, '0').ToUpper();
 
+                    
             //get the instruction based on opcode (first_byte), if successfull proceed with decoding
             if (instruction_set.TryGetValue(first_byte, out Instruction found))
             {
                 //add lenght
                 result.length += found.length;
+
+                //check for segment override
+                if (found.name.Contains(":"))
+                {
+                    Instruction actual_instruction = new Instruction();
+                    actual_instruction = DecodeInstructionAt(ip + 1);
+                    if (actual_instruction.length < 1)
+                    {
+                        //handle errors
+                        result = new Instruction
+                        {
+                            length = 0,
+                            name = "Instruction decoding failed after segment override!"
+                        };
+                    }
+                    else
+                    {
+                        result.name = actual_instruction.name;
+                        result.operand1 = found.name + actual_instruction.operand1;
+                        result.operand2 = actual_instruction.operand2;
+                        result.length = actual_instruction.length + 1;
+                        return result;
+                    }
+                }
 
                 //test if instruction has a second byte
                 if (found.length == 2)

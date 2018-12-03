@@ -27,16 +27,20 @@ namespace Disassembler.Utils
             return instance;
         }
 
-        public void Open(string path)
+        public bool Open(string path)
         {
             if (CheckIfFileExists(path))
             {
-                iostream.OpenFile(path);
+                if (iostream.OpenFile(path))
+                {
+                    return true;
+                }
             }
             else
             {
-                MessageBox.Show("Opening the file failed! Check if file exists", "Error!");
+                MessageBox.Show("Opening the file failed! Check if file exists", "Error!", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
+            return false;
         }
 
         public bool CheckIfFileExists(string path)
@@ -56,7 +60,7 @@ namespace Disassembler.Utils
         private bool CheckIfEXE()
         {
             var tmp = iostream.ReadFromFile(0, 2);
-            if (tmp.Length == 2)
+            if (tmp != null && tmp.Length == 2)
             {
                 //Debug.WriteLine(ASCIIEncoding.UTF8.GetString(tmp));
                 if (ASCIIEncoding.UTF8.GetString(tmp).Equals("MZ"))
@@ -67,13 +71,24 @@ namespace Disassembler.Utils
             return false;
         }
 
+        /// <summary>
+        /// Method that gets the header length if it is an .EXE file.
+        /// </summary>
+        /// <returns>Integer with .EXE header lenght in bytes or -1 if getting the header fails.</returns>
         public int GetHeaderSize()
         {
             if (CheckIfEXE())
             {
                 var tmp = iostream.ReadFromFile(8, 2);
-                ushort paragraphs = BitConverter.ToUInt16(tmp, 0);
-                return paragraphs * 16;
+                if (tmp != null && tmp.Length == 2)
+                {
+                    ushort paragraphs = BitConverter.ToUInt16(tmp, 0);
+                    return paragraphs * 16;
+                }
+                else
+                {
+                    return -1;
+                }
             }
             else
             {
@@ -104,6 +119,12 @@ namespace Disassembler.Utils
             return iostream.Write(path, data);
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="offset"></param>
+        /// <param name="num_bytes"></param>
+        /// <returns></returns>
         public byte[] GetMachineCode(int offset, int num_bytes)
         {
             byte[] machine_code = null;
@@ -112,7 +133,7 @@ namespace Disassembler.Utils
                 int header_lengt = GetHeaderSize();
                 if (header_lengt < 0)
                 {
-                    MessageBox.Show("File is not an EXE file, could not determine code segment! Consider setting the code segment manually.", "Error");
+                    MessageBox.Show("Determining the header length failed! Possibly not an .EXE file. Consider setting the code segment manually.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     return null;
                 }
 
@@ -122,7 +143,7 @@ namespace Disassembler.Utils
                 }
                 catch (Exception e)
                 {
-                    MessageBox.Show("Reading machine code failed! Offset: " + offset + ", num_bytes: " + num_bytes + Environment.NewLine + e.Message);
+                    MessageBox.Show("Reading machine code failed! Offset: " + offset + ", num_bytes: " + num_bytes + Environment.NewLine + e.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
             }
             else
@@ -133,7 +154,7 @@ namespace Disassembler.Utils
                 }
                 catch (Exception e)
                 {
-                    MessageBox.Show("Reading machine code failed! Offset: " + offset + ", num_bytes: " + num_bytes + Environment.NewLine + e.Message);
+                    MessageBox.Show("Reading machine code failed! Offset: " + offset + ", num_bytes: " + num_bytes + Environment.NewLine + e.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
             }
             return machine_code;
