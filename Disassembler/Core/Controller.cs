@@ -46,7 +46,7 @@ namespace Disassembler.Core
             //check if there is a file open
             if (!FileManager.GetInstance().CheckIfFileOpen())
             {
-                MessageBox.Show("Disassembly failed! File not opened! Please open a file first.", "Error");
+                MessageBox.Show("Disassembly failed! File not opened! Please open a file first.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return null;
             }
             byte[] machine_code = FileManager.GetInstance().GetMachineCode(offset, num_bytes);
@@ -69,7 +69,7 @@ namespace Disassembler.Core
                 if (decoded_instruction.length < 1)
                 {
                     //handle errors
-                    MessageBox.Show("Disassembly failed!" + Environment.NewLine + "Decoder returned: " + decoded_instruction.name, "Error");
+                    MessageBox.Show("Disassembly failed!" + Environment.NewLine + "Decoder returned: " + decoded_instruction.name, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     disassemble = false;
                 }
                 else
@@ -86,7 +86,11 @@ namespace Disassembler.Core
             return BuildAssemblyCode(decoded_instructions_list);
         }
 
-
+        /// <summary>
+        /// Checks AH register for 4CH value.
+        /// </summary>
+        /// <param name="decoded_instruction">Decoded instruction.</param>
+        /// <returns>Returns true of false base on instruction opcode and operands. Returns true if AH is set to 4CH.</returns>
         private bool TestPotentialEnd(Instruction decoded_instruction)
         {
             if (decoded_instruction.name.Equals("MOV"))
@@ -122,7 +126,11 @@ namespace Disassembler.Core
             }
         }
 
-
+        /// <summary>
+        /// Test if instruction is a type performing a jump.
+        /// </summary>
+        /// <param name="instruction">Decoded instruction.</param>
+        /// <param name="next_ip">IP value after decoding the instruction.</param>
         private void TestForLabel(ref Instruction instruction, int next_ip)
         {
             if (instruction.name.Contains("J") | instruction.name.Contains("LOOP"))

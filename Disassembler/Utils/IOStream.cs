@@ -17,6 +17,10 @@ namespace Disassembler.Utils
 
         public bool OpenFile(string path)
         {
+            if (isOpened)
+            {
+                CloseFile();
+            }
             fs = File.OpenRead(path);
             if (fs != null)
             {
@@ -37,19 +41,26 @@ namespace Disassembler.Utils
             {
                 return null;
             }
-            if (count == 0)
+            try
             {
-                byte[] buffer = new byte[fs.Length];
-                fs.Seek(offset, SeekOrigin.Begin);
-                fs.Read(buffer, 0, (int)fs.Length - count);
-                return buffer;
+                if (count == 0)
+                {
+                    byte[] buffer = new byte[fs.Length];
+                    fs.Seek(offset, SeekOrigin.Begin);
+                    fs.Read(buffer, 0, (int)fs.Length - count);
+                    return buffer;
+                }
+                else
+                {
+                    byte[] buffer = new byte[count];
+                    fs.Seek(offset, SeekOrigin.Begin);
+                    fs.Read(buffer, 0, count);
+                    return buffer;
+                }
             }
-            else
+            catch
             {
-                byte[] buffer = new byte[count];
-                fs.Seek(offset, SeekOrigin.Begin);
-                fs.Read(buffer, 0, count);
-                return buffer;
+                return null;
             }
         }
 
