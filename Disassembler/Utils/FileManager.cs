@@ -108,7 +108,7 @@ namespace Disassembler.Utils
                 }
                 else
                 {
-                    sb.Append(Convert.ToString(tmp[i], 16).ToUpper().PadLeft(2, '0') + " ");
+                    sb.Append(Convert.ToString(tmp[i], 16).ToUpper().PadLeft(2, '0') + "\t");
                 }
             }
             return sb.ToString();
