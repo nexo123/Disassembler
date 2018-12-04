@@ -38,6 +38,8 @@ namespace Disassembler.Core
             bool potential_end = false;
             int instruction_pointer = 0;
             int buffer_lenght = 0;
+            int last_call = 0;
+            int proc_count = 0;
             Instruction decoded_instruction = new Instruction();
             List<Instruction> decoded_instructions_list = new List<Instruction>();
 
@@ -78,7 +80,7 @@ namespace Disassembler.Core
                     potential_end = TestPotentialEnd(decoded_instruction);
                     decoded_instruction.address = instruction_pointer;
                     instruction_pointer += decoded_instruction.length;
-                    TestForLabel(ref decoded_instruction, instruction_pointer);
+                    TestForLabel(ref decoded_instruction, instruction_pointer, ref proc_count);
                     decoded_instructions_list.Add(decoded_instruction);
                 }
                 
@@ -114,7 +116,12 @@ namespace Disassembler.Core
             }
         }
 
-
+        /// <summary>
+        /// Checks for CS end.
+        /// </summary>
+        /// <param name="potential_end"></param>
+        /// <param name="decoded_instruction"></param>
+        /// <param name="disassemble"></param>
         private void CheckCSEnd(bool potential_end, Instruction decoded_instruction, ref bool disassemble)
         {
             if (potential_end)
@@ -131,15 +138,30 @@ namespace Disassembler.Core
         /// </summary>
         /// <param name="instruction">Decoded instruction.</param>
         /// <param name="next_ip">IP value after decoding the instruction.</param>
-        private void TestForLabel(ref Instruction instruction, int next_ip)
+        private void TestForLabel(ref Instruction instruction, int next_ip, ref int proc_count)
         {
-            if (instruction.name.Contains("J") | instruction.name.Contains("LOOP"))
+            if (instruction.name.Contains("J") || instruction.name.Contains("LOOP"))
             {
                 int jump_address = next_ip + Convert.ToSByte(instruction.operand1.Replace("H", string.Empty), 16);
                 if (!labels.ContainsKey(jump_address))
                 {
                     labels.Add(jump_address, Environment.NewLine + "Label" + labels.Count + ":");
                     instruction.operand1 = "Label" + (labels.Count - 1);
+                }
+                else
+                {
+                    labels.TryGetValue(jump_address, out string label);
+                    instruction.operand1 = label.Replace(":", string.Empty).Replace(Environment.NewLine, string.Empty);
+                }
+            }
+            else if (instruction.name.Contains("CALL"))
+            {
+                int jump_address = next_ip + Convert.ToInt16(instruction.operand1.Replace("H", string.Empty), 16);
+                if (!labels.ContainsKey(jump_address))
+                {
+                    labels.Add(jump_address, Environment.NewLine + "Proc" + proc_count + ":");
+                    instruction.operand1 = "Proc" + proc_count;
+                    proc_count++;
                 }
                 else
                 {
@@ -170,5 +192,30 @@ namespace Disassembler.Core
             return assembly_code;
         }
 
+
+        private void ExperimentalControl(ref int ip, ref bool disassemble, Instruction decoded_instruction)
+        {
+            if (decoded_instruction.name.Contains("J") || decoded_instruction.name.Contains("CALL") || decoded_instruction.name.Contains("LOOP"))
+            {
+                int next_ip = decoded_instruction.length + ip;
+                int jump_address = next_ip + Convert.ToSByte(decoded_instruction.operand1.Replace("H", string.Empty), 16);
+                if (!labels.ContainsKey(jump_address))
+                {
+                    labels.Add(jump_address, Environment.NewLine + "Label" + labels.Count + ":");
+                    decoded_instruction.operand1 = "Label" + (labels.Count - 1);
+                }
+                else
+                {
+                    labels.TryGetValue(jump_address, out string label);
+                    decoded_instruction.operand1 = label.Replace(":", string.Empty).Replace(Environment.NewLine, string.Empty);
+                }
+
+                ip = jump_address;
+            }
+            else if (decoded_instruction.name.Contains("RET"))
+            {
+
+            }
+        }
     }
 }
