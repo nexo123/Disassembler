@@ -142,7 +142,10 @@ namespace Disassembler.Core
         {
             if (instruction.name.Contains("J") || instruction.name.Contains("LOOP"))
             {
-                int jump_address = next_ip + Convert.ToSByte(instruction.operand1.Replace("H", string.Empty), 16);
+                int jump_address = instruction.operand1.Length > 3
+                    ? next_ip + Convert.ToInt16(instruction.operand1.Replace("H", string.Empty), 16)
+                    : next_ip + Convert.ToSByte(instruction.operand1.Replace("H", string.Empty), 16);
+
                 if (!labels.ContainsKey(jump_address))
                 {
                     labels.Add(jump_address, Environment.NewLine + "Label" + labels.Count + ":");
@@ -193,7 +196,7 @@ namespace Disassembler.Core
         }
 
 
-        private void ExperimentalControl(ref int ip, ref bool disassemble, Instruction decoded_instruction)
+        private void ExperimentalControl(ref int ip, ref bool disassemble, Instruction decoded_instruction, ref int last_jump)
         {
             if (decoded_instruction.name.Contains("J") || decoded_instruction.name.Contains("CALL") || decoded_instruction.name.Contains("LOOP"))
             {
@@ -209,8 +212,8 @@ namespace Disassembler.Core
                     labels.TryGetValue(jump_address, out string label);
                     decoded_instruction.operand1 = label.Replace(":", string.Empty).Replace(Environment.NewLine, string.Empty);
                 }
-
                 ip = jump_address;
+                last_jump = next_ip;
             }
             else if (decoded_instruction.name.Contains("RET"))
             {
